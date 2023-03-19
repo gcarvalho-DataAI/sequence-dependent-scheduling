@@ -1,5 +1,6 @@
 #ifndef SOLVER_HPP
 #define SOLVER_HPP
+#define DEBUG 0
 #include <sys/stat.h>
 #include <random>
 #include <algorithm>
@@ -13,47 +14,66 @@
 #include <numeric>
 #include <tuple>
 #include <functional>
-#include <chrono>       // std::chrono::system_clock
+#include <set>
+#include <chrono>
+ 
+#include "ortools/base/logging.h"
+#include "ortools/sat/cp_model.h"
+#include "ortools/sat/cp_model.pb.h"
+#include "ortools/sat/cp_model_solver.h"
+      // std::chrono::system_clock
 
 using namespace std;
 using namespace std::chrono;
+using namespace operations_research::sat;
 
 #define PRINT_MATRIX true
 
 //Configuration of the datasets n, m, c, Tmin, Tmaz
 int nJobs, nTools, magazineCapacity, minTools, maxTools;
 
-int totalTime, bestTime, nSwaps, indexJob;
+int totalTime, bestTime, nSwaps, indexJob, value;
 
 vector<int> bestSolution; /* array with the best jobs assignements*/
-vector<int> currentSolution; /* array with the best jobs assignements*/
-vector<vector<int>> jobsAssignements; /* array with the jobs assignements and it's tools needed*/
+vector<int> currentSolution = {35 ,20 ,11 ,47 ,36 ,39 ,6 ,33 ,10 ,43 ,2 ,45 ,37 ,44 ,5 ,15 ,0 ,17 ,23 ,40 ,3 ,21 ,22 ,7 ,27 ,25 ,12 ,30 ,24 ,29 ,26 ,31 ,32 ,13 ,34 ,8 ,19 ,18 ,28 ,16 ,14 ,41 ,42 ,38 ,1 ,4 ,46 ,49 ,9 ,48}; /* array with the best jobs assignements*/
+vector<set<int>> jobsAssignements; /* array with the jobs assignements and it's tools needed*/
 vector<vector<int>> toolsTimesSwap; /* array with the tool swap times */
-vector<int> magazine;
+set<int> magazine;
 vector<int> jobs;
-vector<int> dif;
 vector<int> initialSetupTimes;
 vector<vector<int>> jobsAssignementsBinary; /* array with the jobs assignements and it's tools needed*/
+vector<set<pair<int, int>>> jobsAssignementsMatrix;
+vector<pair<int, int>> localSearch;
 
+//local-search
 bool swap();
+bool insertion();
+bool oneBlock();
+bool twoOpt();
+
 void updateBestSolution(vector<int> jobs);
 void printStart();
 int runSolution(vector<int> solution);
-int trait(vector<int> tools);
-int populateMagazine(vector<int> tools);
+int populateMagazine(set<int> tools);
 vector<int> unsetZeros(vector<int> vector);
-int ktns(vector<int> solution);
 void checkToolOnMagazine(vector<int> tools);
 int insertOnMagazine();
 int getMaxElement(vector<int> vector);
 int evaluation();
 int contOneBlock(vector<int> solution);
-
+int GPCA();
+int getCost(vector<int> dif1, vector<int> dif2);
+int searchCost(vector<int> costs, int startNodes, int endNodes);
+int LAP(vector<vector<int>> costs, vector<int> uninstall, vector<int> install);
 
 template <typename T>
 ostream& operator<<(ostream& os, const vector<T>& arr);
 template<typename T>
-ostream& operator<< (ostream& out, const vector<vector<T>>& matrix);
+ostream& operator<<(ostream& out, const vector<vector<T>>& matrix);
+ostream& operator<<(ostream& output, const set<int>& set);
+ostream& operator<<(ostream& output, const vector<vector<int>>& matrix);
+ostream& operator<<(ostream& output, const vector<set<int>>& matrix);
+ostream& operator<<(ostream& output, const vector<set<pair<int, int>>>& matrix);
 
 //Node class for use in graph search
 class Node{
@@ -105,18 +125,32 @@ private:
 /*
 Initializes the structures, vectors and matrices used
 */
-void initialization()
+void initialization(vector<int> searchs)
 {
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 
+	localSearch.resize(4);
+
+	for(int i = 0; i < 4; i++){
+		localSearch[i].first = i;
+		localSearch[i].second = 0; 
+	}
+	for(int i = 0; i < searchs.size(); i++){
+		localSearch[i].first = searchs[i];
+		localSearch[searchs[i]].first = i;
+		localSearch[i].second = 1; 
+	}
+
+	
 	totalTime = 0;
 	bestTime = INT_MAX;
 	nSwaps = 0;
 	indexJob = 0;
-	magazine.resize(magazineCapacity);
     initialSetupTimes.resize(nTools);
 	toolsTimesSwap.resize(nTools);
 	bestSolution.resize(nJobs);
-	currentSolution.resize(nJobs);
+	//currentSolution.resize(nJobs);
 
 	jobsAssignementsBinary.resize(nTools);
 	jobsAssignements.resize(nJobs);
@@ -128,9 +162,7 @@ void initialization()
 
     }
 
-	for(int i = 0 ; i < maxTools ; i++) {
-        jobsAssignements[i].resize(nJobs);
-    }
+	
 	
 }
 
@@ -139,6 +171,9 @@ Reads the problem from a file specified by fileName
 */
 void readProblem(string fileName)
 {
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
+
 	ifstream fpIn(fileName);
 	int get;
 
@@ -150,7 +185,7 @@ void readProblem(string fileName)
 
 	cout << nJobs << " " << nTools << " " << magazineCapacity << " " << minTools << " " << maxTools << endl;
 
-	initialization();//initializes all structures, vectors and matrices
+	initialization({0,1,3});//initializes all structures, vectors and matrices
 	for(int i = 0 ; i < nTools ; i++) {
         fpIn >> get;
         initialSetupTimes[i] = get;
@@ -168,6 +203,8 @@ void readProblem(string fileName)
     }
 
 
+
+
 	//Deixar o inicio randomico
 	// obtain a time-based seed:
 
@@ -180,15 +217,16 @@ void readProblem(string fileName)
         for(int j = 0 ; j < nJobs ; j++) {
             fpIn >> get;
 
-            jobsAssignements[i][j] = get;
-			if(get > 0)
+			if(get > 0){
+				jobsAssignements[j].insert(get);
 				jobsAssignementsBinary[get - 1][j] = 1;
+			}
+				
         }
     }
-	
 
-	//cout << jobsAssignementsBinary;
-
+	cout << jobsAssignements;
+	cout << jobsAssignementsBinary;	
 	
 	
 	updateBestSolution(currentSolution);
@@ -199,8 +237,10 @@ void readProblem(string fileName)
 
 
 }
-
+/*
 void printStart(){
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 
 	cout << initialSetupTimes;
 	cout << endl << endl;
@@ -221,84 +261,316 @@ void printStart(){
 	cout << bestSolution;
 	cout << endl << endl;
 }
-
+*/
 void updateBestSolution(vector<int> jobs){
-
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
     copy(jobs.begin(), jobs.end(), bestSolution.begin());
 
 }
 
 int runSolution(vector<int> solution){
 
-	vector<int> tools;
-	tools.resize(maxTools);
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 
 	int cost = 0;
+	pair<int, int> tool;
+    set<pair<int, int>>::iterator it;
+	vector<vector<int>> auxJobsAssignementsMatrix;
 
-	for(int i = 0; i < nJobs; i++){
-		for(int j = 0; j < maxTools; j++){
+	indexJob = 0;
 
-			tools[j] = jobsAssignements[j][solution[i]];			
-		}
+	if(DEBUG){
+		cout << jobsAssignements; 
+		cout << "job -> " << currentSolution[indexJob] << endl;
+		cout << magazine;
+		cout << "cost: " << cost << endl;
 
-		if(i == 0){
-			cost += populateMagazine(tools);		
-		}
-		else{
-			cost += trait(tools);
-		}
+	} 
+   
+    jobsAssignementsMatrix.resize(nJobs);
 
-		indexJob++;
+    auxJobsAssignementsMatrix.resize(nTools);
+    for(int i = 0; i < nTools; i++){
+        auxJobsAssignementsMatrix[i].resize(nJobs);
+
+    }
+
+    for(int i = 0; i < nTools; i++){
+        if(jobsAssignementsBinary[i][solution[nJobs - 1]] == 1){
+
+            auxJobsAssignementsMatrix[i][nJobs - 1] = nJobs - 1;
+
+        }
+        else{
+            auxJobsAssignementsMatrix[i][nJobs - 1] = INT_MAX;
+
+        }
+    }
+
+    for(int i = 0; i < nTools; i++){
+        for(int j = nJobs - 2; j >= 0;j--){
+            if(jobsAssignementsBinary[i][solution[j]] == 1){
+                
+                auxJobsAssignementsMatrix[i][j] = j;
+            }
+            else{
+                auxJobsAssignementsMatrix[i][j] = auxJobsAssignementsMatrix[i][j + 1];
+
+            }
+        }
+    }
+
+    for(int i = 0; i < nTools; i++){
+        for(int j = nJobs - 1; j >= 0;j--){
+
+            tool.first = auxJobsAssignementsMatrix[i][j];
+            tool.second = i + 1;
+            jobsAssignementsMatrix[j].insert(tool);
+
+        }
+    }
+	if(DEBUG)
+		cout << "Jobs assignements matrix: " << jobsAssignementsMatrix;
+
+
+    for(auto& v : auxJobsAssignementsMatrix) {
+        v.clear();
+    }
+    auxJobsAssignementsMatrix.clear();
+    magazine.clear();
+
+    indexJob = 0;
+    cost = insertOnMagazine(); 
+
+	for(indexJob = 1; indexJob < nJobs; indexJob++){
+
+		cost += GPCA();
+
+		if(DEBUG){
+			cout << "job -> " << currentSolution[indexJob] << endl;
+			cout << magazine;
+			cout << "cost: " << cost << endl;
+			cout << "fim job" << endl;
+
+		} 
+
 	}
 
-	tools.clear();
+	magazine.clear();
+
+	for(int i = 0; i < nJobs; i++){
+		jobsAssignementsMatrix[i].clear();
+
+	}
+	jobsAssignementsMatrix.clear();
 
 	return cost;
 	
 }
 
-int trait(vector<int> tools){
+int GPCA(){
 
-	checkToolOnMagazine(tools);
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 
-	vector<int> axMagazine;
+	int cost = 0;
+	set<int> updateMagazine;
+	set<int> uninstall;
+	vector<int> vectorUninstall;
+	vector<int> vectorInstall;
+	set<int> install;
+	set<int>::iterator it1, it2;
+	vector<vector<int>> all_costs;
 
-	axMagazine = unsetZeros(magazine);
+	
+	for(auto& v : jobsAssignementsMatrix[indexJob]){
+        if(updateMagazine.size() < magazineCapacity  && v.second < INT_MAX){
 
-	int n = magazineCapacity - (axMagazine.size() + dif.size());
-	axMagazine.clear();
+                updateMagazine.insert(v.second);
+        }
+        else{
+            break;
+        }
+    }
 
+	if(updateMagazine.size() < magazineCapacity){
+		for(auto& v : magazine){
+			updateMagazine.insert(v);
 
-	if(n < 0){
-
-		return ktns(jobs);
+			if(updateMagazine.size() >= magazineCapacity){
+				break;
+			}
+		}
 	}
-	else{
-		return insertOnMagazine();
+
+
+	set_difference(updateMagazine.begin(), updateMagazine.end(), magazine.begin(), magazine.end(),  inserter(install, install.begin()));
+	set_difference(magazine.begin(), magazine.end(), updateMagazine.begin(), updateMagazine.end(), inserter(uninstall, uninstall.begin()));
+
+	if(DEBUG){
+
+		cout << "Current magazine: " << magazine;
+		cout << "Update magazine: " << updateMagazine;
+		cout << "Unstalling tools: " << uninstall;
+		cout << "Installing tools: " << install; 
+
 	}
 
+	it1 = uninstall.begin();
+	it2 = install.begin();
+
+	for(int i = 0; i < uninstall.size(); i++){
+
+		cost += toolsTimesSwap[*it1 - 1][*it2- 1];
+
+		it1++;
+		it2++;
+
+	}
+
+	/*
+	int indexCost = 0;
+	all_costs.resize(uninstall.size());
+	vectorUninstall.push_back(*it1);
 
 
+	for(int j = 0; j < install.size(); j++){
+
+		vectorInstall.push_back(*it2);
+		if(DEBUG)
+			cout << *it1 << " -> " << *it2 << " = " << toolsTimesSwap[*it1 - 1][*it2- 1] << endl;
+
+		all_costs[indexCost].push_back(toolsTimesSwap[*it1 - 1][*it2- 1]);
+		it2++;
+	}
+	it1++;
+	indexCost++;
+
+	for(int i = 1; i < uninstall.size(); i++){
+
+		vectorUninstall.push_back(*it1);
+		it2 = install.begin();
+		
+		for(int j = 0; j < install.size(); j++){
+			if(DEBUG)
+				cout << *it1 << " -> " << *it2 << " = " << toolsTimesSwap[*it1 - 1][*it2- 1] << endl;
+			all_costs[indexCost].push_back(toolsTimesSwap[*it1 - 1][*it2- 1]);
+			it2++;
+		}
+
+		it1++;
+		indexCost++;
+
+	}
+
+	cost = LAP(all_costs, vectorUninstall, vectorInstall);*/
+
+	if(DEBUG)
+		cout << "Job cost: " << cost << endl;
+
+	swap(updateMagazine, magazine);
+
+	updateMagazine.clear();
+	for(auto& v : all_costs)
+        v.clear();
+    
+	all_costs.clear();
+	//exit(1);
+
+
+
+	return cost;
 }
 
-int populateMagazine(vector<int> tools){
+
+int LAP(vector<vector<int>> costs, vector<int> uninstall, vector<int> install) {
+	// Data
+	
+	const int num_workers = static_cast<int>(costs.size());
+	const int num_tasks = static_cast<int>(costs[0].size());
+
+	// Model
+	CpModelBuilder cp_model;
+
+	// Variables
+	// x[i][j] is an array of Boolean variables. x[i][j] is true
+	// if worker i is assigned to task j.
+	std::vector<std::vector<BoolVar>> x(num_workers, std::vector<BoolVar>(num_tasks));
+
+	for (int i = 0; i < num_workers; ++i) {
+		for (int j = 0; j < num_tasks; ++j) {
+			x[i][j] = cp_model.NewBoolVar();
+		}
+	}
+
+	// Constraints
+	// Each worker is assigned to at most one task.
+	for (int i = 0; i < num_workers; ++i) {
+		cp_model.AddAtMostOne(x[i]);
+	}
+	// Each task is assigned to exactly one worker.
+	for (int j = 0; j < num_tasks; ++j) {
+		std::vector<BoolVar> tasks;
+		for (int i = 0; i < num_workers; ++i) {
+			tasks.push_back(x[i][j]);
+		}
+		cp_model.AddExactlyOne(tasks);
+	}
+
+	// Objective
+	LinearExpr total_cost;
+	for (int i = 0; i < num_workers; ++i) {
+		for (int j = 0; j < num_tasks; ++j) {
+			total_cost += x[i][j] * costs[i][j];
+		}
+	}
+	cp_model.Minimize(total_cost);
+
+	const CpSolverResponse response = Solve(cp_model.Build());
+
+	if (response.status() == CpSolverStatus::INFEASIBLE) {
+		cout << "LAP failure, no solution found." << endl;
+		exit(1);
+	}
+
+	if(DEBUG){
+		cout << "Total cost: " << response.objective_value() << endl;
+		
+		for (int i = 0; i < num_workers; ++i) {
+			for (int j = 0; j < num_tasks; ++j) {
+				if (SolutionBooleanValue(response, x[i][j])) {
+					cout << "Uninstalling " << uninstall[i] << " installing " << install[j]
+							<< ".  Cost: " << costs[i][j] << endl;
+				}
+			}
+		}
+	}
+
+	return response.objective_value();
+	
+}
+
+
+int getCost(vector<int> dif1, vector<int> dif2){
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 
 	int cost = 0;
 
-	for(int i = 0; i < tools.size(); i++){
+	for(int i = 0; i < dif1.size(); i++){
 
-		cost += initialSetupTimes[tools[i]];
-		nSwaps ++;
+		cost += toolsTimesSwap[dif1[i] - 1][dif2[i] - 1];
 
-		magazine[i] = tools[i];
-		
 	}
 
 	return cost;
-
 }
 
 vector<int> unsetZeros(vector<int> vector){
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 
 	vector.erase( remove( vector.begin(), vector.end(), 0 ), vector.end() ) ;
 
@@ -306,109 +578,46 @@ vector<int> unsetZeros(vector<int> vector){
 
 }
 
-void checkToolOnMagazine(vector<int> tools){
-
-	vector<int> updateMagazine;
-
-	dif.clear();
-
-	dif.resize(magazineCapacity);
-
-	sort(tools.begin(), tools.end());
-	sort(magazine.begin(), magazine.end());
-
-	set_difference(tools.begin(), tools.end(), magazine.begin(), magazine.end(), dif.begin());
-
-	dif = unsetZeros(dif);
-
-}
-
 int insertOnMagazine(){
+
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 	
-	int count = 0;
 	int cost = 0;
-	for(int i = 0; i < maxTools; i++){
-		if(magazine[i] == 0){
-			cost += initialSetupTimes[dif[count]];
-			nSwaps++;
-			magazine[i] = dif[count++]; 
-		}
-	}
+	int i = 1, n;
+
+	for(auto& v : jobsAssignementsMatrix[indexJob]){
+
+        if(magazine.size() < magazineCapacity){
+            magazine.insert(v.second);
+
+			if(DEBUG){
+
+				cout << "Total cost: " << cost << endl;
+				cout << "Installing tool: " << v.second << endl;
+				cout << "Install cost: " << initialSetupTimes[v.second - 1] << endl;
+			}
+            
+            cost += initialSetupTimes[v.second - 1];
+			if(DEBUG)
+				cout << "Updated total cost: " << cost << endl;
+
+        }
+        else{
+            break;
+        }
+    }
+    
+    indexJob++;
+	
 	return cost;
 
 }
 
-int contOneBlock(){
-
-	int cont = 0;
-	
-	for(int i = 0; i < nTools; i++){
-		if(jobsAssignementsBinary[i][currentSolution[0]] == 1){
-			cont++;
-		}
-
-		
-		for(int j = 1; j < nJobs; j++){
-			if(jobsAssignementsBinary[i][currentSolution[j]] == 1 && jobsAssignementsBinary[i][currentSolution[j - 1]] == 0){
-				cont++;
-			}
-			
-		}
-	}
-
-	return cont;
-}
-
 bool oneBlock(){
-
-
-	int bestCont = contOneBlock();
-	int bestContTime = evaluation();
-
-	
-	int aux, tempCont;
-
-	for(int i = 0; i < nJobs; i++){
-
-		for(int j = 0; j < nJobs; j++){
-
-			aux = currentSolution[i];
-			currentSolution[i] = currentSolution[j];
-			currentSolution[j] = aux;
-
-			tempCont = contOneBlock();
-
-			if(tempCont < bestCont && evaluation() < bestContTime){
-
-				cout << "Aqui\n";
-				cout << "tempCont: " << tempCont << endl;
-
-				copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
-
-				//return true;
-
-			}
-
-			else{
-				aux = currentSolution[i];
-				currentSolution[i] = currentSolution[j];
-				currentSolution[j] = aux;
-			}
-		}
-
-
-	}
-
-	cout << "No improvement, best cont: " << bestCont << endl;
-
-
-	return false;
-
-}
-
-bool swap(){
-
-	int bestCont = evaluation();
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
+	int bestCont = runSolution(currentSolution);
 	int aux, tempCont = 0;
 
 	vector<int> index;
@@ -419,41 +628,104 @@ bool swap(){
 		index[i] = i;
 	}
 
-	// obtain a time-based seed:
-	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-
-	shuffle (index.begin(), index.end(), std::default_random_engine(seed));
-
-
-	for(int i = 0; i < nJobs; i++){
+	
+	for(int i = 0; i < nTools; i++){
 
 		for(int j = 0; j < nJobs; j++){
 
-			aux = currentSolution[index[i]];
-			currentSolution[index[i]] = currentSolution[index[j]];
-			currentSolution[index[j]] = aux;
-			tempCont = evaluation();
+			if(jobsAssignementsBinary[i][currentSolution[index[j]]] == 1){
+				for(int k = j + 1; k  < nJobs; k++){
 
+					if(jobsAssignementsBinary[i][currentSolution[index[j]]] == 1 && k != j){
 
-			if(tempCont < bestCont){
+						//inserir uma posição anterior ao bloco de 1 encontrado
 
-				copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
+						if(k - 1 >= 0){
+							aux = currentSolution[index[k - 1]];
+							currentSolution[index[k - 1]] = currentSolution[index[j]];
+							currentSolution[index[j]] = aux;
+							tempCont = runSolution(currentSolution);
 
-				return true;
+							if(tempCont < bestCont){
 
+								copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
+								totalTime = tempCont;
+
+								cout << "Improvement, best cont: " << tempCont << endl << bestSolution;
+
+								index.clear();
+								return true;
+
+							}
+							else{
+								aux = currentSolution[index[k - 1]];
+								currentSolution[index[k - 1]] = currentSolution[index[j]];
+								currentSolution[index[j]] = aux;
+							}
+
+						}
+
+						int l;
+						for(l = k + 1; l < nJobs && jobsAssignementsBinary[i][currentSolution[index[l]]] != 0; l++){
+							
+							//entre o bloco
+							aux = currentSolution[index[l]];
+							currentSolution[index[l]] = currentSolution[index[j]];
+							currentSolution[index[j]] = aux;
+							tempCont = runSolution(currentSolution);
+
+							if(tempCont < bestCont){
+
+								copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
+
+								totalTime = tempCont;
+
+								cout << "Improvement, best cont: " << tempCont << endl << bestSolution;
+
+								index.clear();
+								return true;
+
+							}
+							else{
+								aux = currentSolution[index[l]];
+								currentSolution[index[l]] = currentSolution[index[j]];
+								currentSolution[index[j]] = aux;
+							}
+						}
+						//inserir depois do bloco de 1
+
+						if(jobsAssignementsBinary[i][currentSolution[index[l]]] == 0 && jobsAssignementsBinary[i][currentSolution[index[l - 1]]] == 1){
+							aux = currentSolution[index[l]];
+							currentSolution[index[l]] = currentSolution[index[j]];
+							currentSolution[index[j]] = aux;
+							tempCont = runSolution(currentSolution);
+
+							if(tempCont < bestCont){
+
+								copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
+								totalTime = tempCont;
+
+								//cout << currentSolution;
+
+								cout << "Improvement, best cont: " << tempCont << endl << bestSolution;
+
+								index.clear();
+								return true;
+
+							}
+							else{
+								aux = currentSolution[index[l]];
+								currentSolution[index[l]] = currentSolution[index[j]];
+								currentSolution[index[j]] = aux;
+							}
+						}
+
+					}
+				}
 			}
-			else{
-				aux = currentSolution[index[i]];
-				currentSolution[index[i]] = currentSolution[index[j]];
-				currentSolution[index[j]] = aux;
-			}
-
-			
-
 		}
-
-
 	}
+	
 
 	cout << "No improvement, best cont: " << bestCont << endl;
 
@@ -462,170 +734,238 @@ bool swap(){
 
 }
 
+bool twoOpt(){
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
+
+	int bestCont = runSolution(currentSolution);
+	int aux, tempCont = 0;
+
+	vector<int> index;
+	index.resize(nJobs);
+
+	for(int i = 0; i < nJobs; i++){
+		index[i] = i;
+	}
+
+	
+	for(int i = 1; i < nJobs; i++){
+
+		for(int j = 0; (j + i) < nJobs; j++){
+
+
+			reverse(&currentSolution[index[j]], &currentSolution[index[j + i]]);
+
+			tempCont = runSolution(currentSolution);
+
+			if(tempCont < bestCont){
+
+				copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
+
+				totalTime = tempCont;
+
+				cout << "Improvement, best cont: " << tempCont << endl << bestSolution;
+
+				index.clear();
+
+				return true;
+
+			}
+			else{
+				reverse(&currentSolution[index[j]], &currentSolution[index[j + i]]);
+			}
+
+			
+		}
+	}
+	//cout << bestSolution;
+	cout << "No improvement, best cont: " << bestCont << endl;
+
+	return false;
+
+}
+
+bool insertion(){
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
+
+	int bestCont = runSolution(currentSolution);
+	int aux, tempCont = 0;
+
+	vector<int> index;
+	vector<int> insertions;
+
+	index.resize(nJobs);
+	insertions.resize(nJobs);
+
+	for(int i = 0; i < nJobs; i++){
+		index[i] = i;
+		insertions[i] = i;
+	}
+
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	shuffle (index.begin(), index.end(), std::default_random_engine(seed));
+	
+	for(int i = 0; i < nJobs; i++){
+
+		shuffle (insertions.begin(), insertions.end(), std::default_random_engine(seed));
+
+		for(int j = 0; (j + i) < nJobs; j++){
+
+			aux = currentSolution[index[i]];
+			currentSolution[index[i]] = currentSolution[insertions[j]];
+			currentSolution[insertions[j]] = aux;
+
+			tempCont = runSolution(currentSolution);
+
+			if(tempCont < bestCont){
+
+				copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
+
+				totalTime = tempCont;
+
+				cout << "Improvement, best cont: " << tempCont << endl << bestSolution;
+
+				index.clear();
+
+				return true;
+
+			}
+			else{
+
+				aux = currentSolution[index[i]];
+				currentSolution[index[i]] = currentSolution[insertions[j]];
+				currentSolution[insertions[j]] = aux;
+
+			}
+
+			
+		}
+	}
+
+	cout << "No improvement, best cont: " << bestCont << endl;
+
+	return false;
+
+}
+
+bool swap(){
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
+
+	int bestCont = runSolution(currentSolution);
+	int aux, tempCont = 0;
+
+	vector<int> index;
+	index.resize(nJobs);
+
+	for(int i = 0; i < nJobs; i++){
+		index[i] = i;
+	}
+
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	shuffle (index.begin(), index.end(), std::default_random_engine(seed));
+
+	for(int i = 0; i < nJobs; i++){
+
+		for(int j = 0; j < nJobs; j++){
+
+			aux = currentSolution[index[i]];
+			currentSolution[index[i]] = currentSolution[index[j]];
+			currentSolution[index[j]] = aux;
+			tempCont = runSolution(currentSolution);
+
+
+			if(tempCont < bestCont){
+
+				copy(currentSolution.begin(), currentSolution.end(), bestSolution.begin());
+				totalTime = tempCont;
+
+				cout << "Improvement, best cont: " << tempCont << endl << bestSolution;
+
+				index.clear();
+				return true;
+
+			}
+			else{
+				aux = currentSolution[index[i]];
+				currentSolution[index[i]] = currentSolution[index[j]];
+				currentSolution[index[j]] = aux;
+			}
+		}
+	}
+
+	cout << "No improvement, best cont: " << bestCont << endl << bestSolution;
+	index.clear();	
+
+	return false;
+
+}
+
 void vnd(){
+
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
+
 	int k = 0;
-
-	int bestCont = evaluation();
+	int bestCont = runSolution(currentSolution);
 	int cont = INT_MAX;
-
-	//cout << jobsAssignementsBinary;
 
 	cout << "Result: " << bestCont << endl;
 
-	int i = 0;
+	while(k != 4){
 
-	while(k != 2){
-
-		//cout << "K = " << k << endl;
-
-		switch (k)
+		switch (localSearch[k].first)
 		{
 			case 0: {
 
-			
-				if(!swap())
-					k = 2;
-				else
-					k = 0;
+				if(localSearch[k].second){
+					if(!swap())
+						k = 1;
+					else
+						k = 0;
+				}
+				
 			}
 			break;
 
 			case 1: {
-				if(!oneBlock())
-					k = 2;
-				else
-					k = 0;
-			}
-			break;
-		
-		
-		}
-		
-
-	}
-
-	cout << "Result swap: " << evaluation() << endl;
-
-	//exit(1);
-	/*
-
-	solution = oneBlock(jobs);
-
-	cout << "Result block: " << runSolution(solution) << endl;
-
-		cout << jobsAssignementsBinary;
-
-
-	exit(1);*/
-/*
-
-
-	while (k != 5){
-		if(k == 0){
-			solution = jobInsertion();
-		}
-		else if(k == 1){
-			solution = jobExchange();
-
-		}
-		else if(k == 2){
-			solution = jobRealocation();
-
-		}
-		else if(k == 3){
-			solution = oneBlock();
-
-		}
-		else if(k == 5){
-			solution = swap();
-
-		}
-	}*/
-}
-
-int ktns(vector<int> solution){
-
-	vector<int> tools;
-	vector<int> time;
-	vector<int>::iterator it;
-	int timeCount = 0, n = 0;
-	int cost = 0;
-
-	time.resize(magazineCapacity);
-	tools.resize(maxTools);
-
-	for(int j = 0; j < magazineCapacity; j++){
-		time[j] = INT_MAX;
-	}
-
-
-	for(int i = indexJob; i < nJobs; i++){
-
-		for(int j = 0; j < maxTools; j++){
-
-			tools[j] = jobsAssignements[j][solution[i]];
-
-		}
-
-		for(int j = 0; j < magazineCapacity; j++){
-
-			if(magazine[j] != 0){
-
-				it = find(tools.begin(), tools.end(), magazine[j]);
-
-				if (it != tools.end()){
-					if(time[j] == INT_MAX){
-						time[j] = i - indexJob;
-					}
+				if(localSearch[k].second){
+					if(!twoOpt())
+						k = 2;
+					else
+						k = 0;
 				}
 			}
-			
+			break;
+
+			case 2: {
+				if(localSearch[k].second){
+					if(!oneBlock())
+						k = 3;
+					else
+						k = 0;
+				}
+			}
+			break;
+
+			case 3: {
+				if(localSearch[k].second){
+					if(!insertion())
+						k = 4;
+					else
+						k = 0;
+				}
+			}
+			break;
+		
 		}
 		
-	}
-
-	for(int i = 0; i < dif.size(); i++){
-
-		n = getMaxElement(time);
-		time[n] = INT_MIN;
-
-		if(magazine[n] == 0){
-			cost += initialSetupTimes[dif[i] - 1];
-		}
-		else{
-			cost += toolsTimesSwap[magazine[n] - 1][dif[i] - 1];
-
-		}
-
-		magazine[n] = dif[i];
-
-		nSwaps++;
 
 	}
+	cout << "Result: " << bestCont << endl;
 
-	tools.clear();
-	time.clear();
-
-	return cost;
-
-
-
-	
-}
-
-int getMaxElement(vector<int> vector){
-
-	int elem, i;
-
-	elem = *max_element(vector.begin(), vector.end());
-
-	for(i = 0; i < vector.size(); i++){
-		if(vector[i] == elem){
-			break;
-		}
-	}
-
-	return i;
+	cout << bestSolution;
 
 }
 
@@ -635,6 +975,17 @@ ostream& operator<<(ostream& output, const vector<T>& vector) {
     output << "[";
 
 	for(int element : vector){
+		output << element << " ,";
+	}
+    
+    output << "]\n";
+    return output;
+}
+
+ostream& operator<<(ostream& output, const set<int>& set) {
+    output << "[";
+
+	for(int element : set){
 		output << element << " ";
 	}
     
@@ -642,10 +993,32 @@ ostream& operator<<(ostream& output, const vector<T>& vector) {
     return output;
 }
 
-template<typename T>
-ostream& operator<<(ostream& output, const vector<vector<T>>& matrix) {
+ostream& operator<<(ostream& output, const vector<vector<int>>& matrix) {
 
-	for(vector<T> line : matrix){
+	for(vector<int> line : matrix){
+		output << line;
+	}
+    
+    return output;
+}
+
+ostream& operator<<(ostream& output, const vector<set<pair<int, int>>>& matrix) {
+
+	for(set<pair<int, int>> line : matrix){
+		output << "[";
+		for(pair<int, int> elem : line)
+			output << "( " << elem.first << ", " << elem.second << " ) ";
+
+	    output << "]\n";
+
+	}
+    
+    return output;
+}
+
+ostream& operator<<(ostream& output, const vector<set<int>>& matrix) {
+
+	for(set<int> line : matrix){
 		output << line;
 	}
     
@@ -676,29 +1049,9 @@ Evaluates the current solution
 */
 int evaluation()
 {
-	vector<int> tools;
-	tools.resize(maxTools);
+	cout <<__FUNCTION__ << endl;
 
 	int value = 0;
-
-	for(int i = 0; i < nJobs; i++){
-		for(int j = 0; j < maxTools; j++){
-
-			tools[j] = jobsAssignements[j][currentSolution[i]];			
-		}
-
-		if(i == 0){
-			value += populateMagazine(tools);		
-		}
-		else{
-			value += trait(tools);
-		}
-
-		indexJob++;
-	}
-
-	tools.clear();
-
 	return value;						//returns the maximum number of open stacks
 }
 
@@ -740,7 +1093,6 @@ void termination()
     jobs.clear();
 	bestSolution.clear();
 	currentSolution.clear();
-	dif.clear();
 
 	jobsAssignementsBinary.clear();
 	jobsAssignements.clear();
