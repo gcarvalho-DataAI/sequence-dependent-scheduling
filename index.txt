@@ -1,1 +1,1 @@
-instance/instance_txt/J50C25_1.txt
+instances/instance_txt/J50C25_1.txt

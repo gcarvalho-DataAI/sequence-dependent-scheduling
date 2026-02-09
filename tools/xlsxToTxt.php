@@ -1,9 +1,9 @@
 <?php
 
-$list = glob('instance/instance_xlsx/*.xlsx');
+$list = glob('instances/instance_xlsx/*.xlsx');
 $index = '';
 
-$setsConfiguration = file_get_contents("instance/dataSetsConfiguration.txt");
+$setsConfiguration = file_get_contents("instances/dataSetsConfiguration.txt");
 preg_match_all('#([^\s]*)\s(\d+\s\d+\s\d+\s\d+\s\d+)#is', $setsConfiguration, $matches);
 $intances = $matches[1];
 $sets = $matches[2];
@@ -18,19 +18,19 @@ foreach($list as $n => $file) {
 
     $key = array_search($name, $intances);
 
-    print_r("{$file} -> instance/instance_txt/{$fileName}.txt\n");
+    print_r("{$file} -> instances/instance_txt/{$fileName}.txt\n");
 
-    shell_exec("ssconvert {$file} instance/instance_txt/{$fileName}.txt");
+    shell_exec("ssconvert {$file} instances/instance_txt/{$fileName}.txt");
 
-    $txt = file_get_contents("instance/instance_txt/{$fileName}.txt");
+    $txt = file_get_contents("instances/instance_txt/{$fileName}.txt");
 
     $txt = preg_replace('#,#is', ' ', $txt);
 
     $result = $sets[$key] . "\n" . $txt;
 
-    file_put_contents("instance/instance_txt/{$fileName}.txt", $result);
+    file_put_contents("instances/instance_txt/{$fileName}.txt", $result);
 
-    $index = $index . "instance/instance_txt/{$fileName}.txt\n";
+    $index = $index . "instances/instance_txt/{$fileName}.txt\n";
 
 }
 

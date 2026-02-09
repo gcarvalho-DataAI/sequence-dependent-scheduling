@@ -1,29 +1,66 @@
-# README #
+# Sequence-Dependent Scheduling (SSP) Solver
 
-This README would normally document whatever steps are necessary to get your application up and running.
+C++17 solver for the Sequence-Dependent Scheduling Problem, focusing on minimizing tool switches and setup times. The project integrates OR-Tools for optimization and provides benchmark instances and reproducible experiments.
 
-### What is this repository for? ###
+## Repository Layout
 
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
+- `src/` – main entry point (`testManager.cpp`)
+- `include/` – solver headers (`solver.hpp`, `pl.hpp`)
+- `instances/` – problem instances (txt/xlsx)
+- `index.txt` – list of instance files used by the solver
+- `tests/` – small tests and examples
+- `tools/` – utilities (e.g., XLSX → TXT converter)
+- `results/` – experiment outputs (ignored by Git)
+- `third_party/or-tools/` – OR-Tools source (not tracked; see setup)
 
-### How do I get set up? ###
+## Setup
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+### 1) Dependencies (Ubuntu)
 
-### Contribution guidelines ###
+```bash
+sudo apt update
+sudo apt install -y cmake g++ make pkg-config libprotobuf-dev protobuf-compiler libgoogle-glog-dev libeigen3-dev zlib1g-dev
+```
 
-* Writing tests
-* Code review
-* Other guidelines
+### 2) OR-Tools (source, local build)
 
-### Who do I talk to? ###
+Clone OR-Tools into `third_party/or-tools`:
 
-* Repo owner or admin
-* Other community or team contact
+```bash
+git clone https://github.com/google/or-tools.git third_party/or-tools
+cd third_party/or-tools
+make cpp -j4
+```
+
+### 3) Build the solver
+
+```bash
+cd /path/to/sequence-dependent-scheduling
+
+g++ -std=c++17 -O2 src/testManager.cpp -o bin/solver \
+  -I include \
+  -I third_party/or-tools/install_make/include \
+  -L third_party/or-tools/install_make/lib \
+  -Wl,-rpath,$PWD/third_party/or-tools/install_make/lib \
+  -lortools -lprotobuf -lglog -pthread
+```
+
+### 4) Run
+
+```bash
+./bin/solver
+```
+
+The solver reads instances from `index.txt` and writes a summary to `RESULTS_SUMMARY.txt` (ignored by Git).
+
+## Notes
+
+- OR-Tools is **not** committed to this repository. Always clone it into `third_party/or-tools`.
+- If you prefer not to set rpath, export:
+  ```bash
+  export LD_LIBRARY_PATH=$PWD/third_party/or-tools/install_make/lib:$LD_LIBRARY_PATH
+  ```
+
+## License
+
+Add your license here.
