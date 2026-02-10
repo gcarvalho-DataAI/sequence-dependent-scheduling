@@ -51,7 +51,24 @@ g++ -std=c++17 -O2 src/testManager.cpp -o bin/solver \
 ./bin/solver
 ```
 
-The solver reads instances from `index.txt` and writes a summary to `RESULTS_SUMMARY.txt` (ignored by Git).
+The solver reads instances from `index.txt` and writes one summary file per instance in `results/` (ignored by Git).
+
+### Parallel execution
+
+Run all instances in parallel (24 jobs example):
+
+```bash
+find instances/instance_txt -type f -name "*.txt" | sort | parallel -j24 ./bin/solver {}
+```
+
+Each instance writes to `results/\<instance\>.summary.txt`.
+
+Or run:
+
+```bash
+JOBS=24 ./scripts/run_all.sh
+```
+
 
 ## Notes
 
