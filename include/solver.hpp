@@ -27,7 +27,7 @@ using namespace std;
 using namespace std::chrono;
 using namespace operations_research::sat;
 
-#define PRINT_MATRIX true
+#define PRINT_MATRIX false
 
 //Configuration of the datasets n, m, c, Tmin, Tmaz
 int nJobs, nTools, magazineCapacity, minTools, maxTools;
