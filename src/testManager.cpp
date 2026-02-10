@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <filesystem>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -8,14 +9,14 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-#define RUNS 1						//how many runs for each instance?
+#define RUNS 10						// how many runs for each instance?
 
 int main(int argc, char** argv)
 {
-	int solutionValue;					//stores the result
+	int solutionValue;					// stores the result
 	int i = 0, j;
 
-	double runningTime;					//stores the running time
+	double runningTime;					// stores the running time
 
 	string indexPath = "index.txt";
 	string outDir = "results";
@@ -63,13 +64,59 @@ int main(int argc, char** argv)
 			return 1;
 		}
 
+		vector<int> values;
+		vector<double> times;
+		values.reserve(RUNS);
+		times.reserve(RUNS);
+
+		fpOut << "# instance: " << inputFileName << "\n";
+		fpOut << "# runs: " << RUNS << "\n";
+		fpOut << "# run_id value time_seconds\n";
+
 		for (j = 0; j < RUNS; j++)
 		{
 			printf("Run %d\n", j + 1);
 
 			multiRun(&solutionValue, &runningTime, inputFileName, j + 1);
 			printf("PROBLEM %d: %s %d\n", i, inputFileName.c_str(), solutionValue);
-			fpOut << inputFileName << " " << j + 1 << " " << solutionValue << " " << runningTime << endl;
+
+			values.push_back(solutionValue);
+			times.push_back(runningTime);
+
+			fpOut << (j + 1) << " " << solutionValue << " " << runningTime << "\n";
 		}
+
+		double avgValue = values.empty() ? 0.0
+			: static_cast<double>(accumulate(values.begin(), values.end(), 0LL)) / values.size();
+		double avgTime = times.empty() ? 0.0
+			: accumulate(times.begin(), times.end(), 0.0) / times.size();
+
+		int bestValue = values.empty() ? 0 : values.front();
+		double bestTime = times.empty() ? 0.0 : times.front();
+		for (size_t k = 1; k < values.size(); ++k) {
+			if (values[k] < bestValue) {
+				bestValue = values[k];
+				bestTime = times[k];
+			}
+		}
+
+		fpOut << "# avg_value " << avgValue << "\n";
+		fpOut << "# avg_time " << avgTime << "\n";
+		fpOut << "# best_value " << bestValue << "\n";
+		fpOut << "# best_time " << bestTime << "\n";
+
+		// Convergence curve as best-so-far across runs.
+		fpOut << "# convergence_best_so_far ";
+		int bestSoFar = values.empty() ? 0 : values.front();
+		for (size_t k = 0; k < values.size(); ++k) {
+			if (values[k] < bestSoFar) {
+				bestSoFar = values[k];
+			}
+			fpOut << bestSoFar;
+			if (k + 1 < values.size()) {
+				fpOut << ",";
+			}
+		}
+		fpOut << "\n";
 	}
 }
