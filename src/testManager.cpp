@@ -45,6 +45,7 @@ int main(int argc, char** argv)
 
 	string indexPath = "index.txt";
 	string outDir = "results";
+	string solutionsDir = "solutions";
 	vector<string> instances;
 
 	for (int a = 1; a < argc; ++a) {
@@ -53,8 +54,10 @@ int main(int argc, char** argv)
 			indexPath = argv[++a];
 		} else if (arg == "--out" && a + 1 < argc) {
 			outDir = argv[++a];
+		} else if (arg == "--solutions" && a + 1 < argc) {
+			solutionsDir = argv[++a];
 		} else if (arg == "--help" || arg == "-h") {
-			printf("Usage: %s [--index FILE] [--out DIR] [instance1 instance2 ...]\n", argv[0]);
+			printf("Usage: %s [--index FILE] [--out DIR] [--solutions DIR] [instance1 instance2 ...]\n", argv[0]);
 			return 0;
 		} else {
 			instances.push_back(arg);
@@ -74,6 +77,7 @@ int main(int argc, char** argv)
 	}
 
 	fs::create_directories(outDir);
+	fs::create_directories(solutionsDir);
 
 	for (const auto& inputFileName : instances)
 	{
@@ -83,6 +87,9 @@ int main(int argc, char** argv)
 		string baseName = inPath.filename().string();
 		string outPath = (fs::path(outDir) / (baseName + ".summary.txt")).string();
 		string jsonPath = (fs::path(outDir) / (baseName + ".summary.json")).string();
+		fs::path instanceSolutionsDir = fs::path(solutionsDir) / baseName;
+		fs::create_directories(instanceSolutionsDir);
+
 		ofstream fpOut(outPath);
 		ofstream fpJson(jsonPath);
 
@@ -111,6 +118,7 @@ int main(int argc, char** argv)
 
 		for (j = 0; j < RUNS; j++)
 		{
+			int runId = j; // 0-based, for file naming
 			printf("Run %d\n", j + 1);
 
 			multiRun(&solutionValue, &runningTime, inputFileName, j + 1);
@@ -120,11 +128,24 @@ int main(int argc, char** argv)
 			times.push_back(runningTime);
 
 			fpOut << (j + 1) << " " << solutionValue << " " << runningTime << "\n";
-			fpJson << "    {\"run_id\": " << (j + 1)
+			fpJson << "    {\"run_id\": " << runId
 					<< ", \"value\": " << solutionValue
 					<< ", \"time_seconds\": " << runningTime << "}";
 			if (j + 1 < RUNS) fpJson << ",";
 			fpJson << "\n";
+
+			// Per-run output file under solutions/<instance>/<instance>_<runId>.txt
+			fs::path runPath = instanceSolutionsDir / (baseName + "_" + to_string(runId) + ".txt");
+			ofstream fpRun(runPath.string());
+			if (!fpRun) {
+				fprintf(stderr, "ERROR: cannot write to %s\n", runPath.string().c_str());
+				return 1;
+			}
+			fpRun << "instance " << inputFileName << "\n";
+			fpRun << "run_id " << runId << "\n";
+			fpRun << "value " << solutionValue << "\n";
+			fpRun << "time_seconds " << runningTime << "\n";
+			fpRun << "note output is limited to summary metrics; enable verbose solver output to expand this file.\n";
 		}
 
 		double avgValue = values.empty() ? 0.0
