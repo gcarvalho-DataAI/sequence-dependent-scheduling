@@ -3,6 +3,7 @@
 #include <numeric>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include "solver.hpp"
 
@@ -34,6 +35,34 @@ static string jsonEscape(const string& s) {
 		}
 	}
 	return out;
+}
+
+static bool redirectOutput(const string& path, int& savedStdout, int& savedStderr) {
+	fflush(stdout);
+	fflush(stderr);
+
+	savedStdout = dup(fileno(stdout));
+	savedStderr = dup(fileno(stderr));
+	if (savedStdout == -1 || savedStderr == -1) {
+		return false;
+	}
+
+	if (!freopen(path.c_str(), "w", stdout)) {
+		return false;
+	}
+	if (!freopen(path.c_str(), "a", stderr)) {
+		return false;
+	}
+	return true;
+}
+
+static void restoreOutput(int savedStdout, int savedStderr) {
+	fflush(stdout);
+	fflush(stderr);
+	dup2(savedStdout, fileno(stdout));
+	dup2(savedStderr, fileno(stderr));
+	close(savedStdout);
+	close(savedStderr);
 }
 
 int main(int argc, char** argv)
@@ -119,10 +148,24 @@ int main(int argc, char** argv)
 		for (j = 0; j < RUNS; j++)
 		{
 			int runId = j; // 0-based, for file naming
-			printf("Run %d\n", j + 1);
+			fs::path runPath = instanceSolutionsDir / (baseName + "_" + to_string(runId) + ".txt");
+
+			int savedStdout = -1;
+			int savedStderr = -1;
+			if (!redirectOutput(runPath.string(), savedStdout, savedStderr)) {
+				fprintf(stderr, "ERROR: cannot redirect output to %s\n", runPath.string().c_str());
+				return 1;
+			}
+
+			printf("instance %s\n", inputFileName.c_str());
+			printf("run_id %d\n", runId);
 
 			multiRun(&solutionValue, &runningTime, inputFileName, j + 1);
-			printf("PROBLEM %d: %s %d\n", i, inputFileName.c_str(), solutionValue);
+
+			printf("value %d\n", solutionValue);
+			printf("time_seconds %.6f\n", runningTime);
+
+			restoreOutput(savedStdout, savedStderr);
 
 			values.push_back(solutionValue);
 			times.push_back(runningTime);
@@ -133,19 +176,6 @@ int main(int argc, char** argv)
 					<< ", \"time_seconds\": " << runningTime << "}";
 			if (j + 1 < RUNS) fpJson << ",";
 			fpJson << "\n";
-
-			// Per-run output file under solutions/<instance>/<instance>_<runId>.txt
-			fs::path runPath = instanceSolutionsDir / (baseName + "_" + to_string(runId) + ".txt");
-			ofstream fpRun(runPath.string());
-			if (!fpRun) {
-				fprintf(stderr, "ERROR: cannot write to %s\n", runPath.string().c_str());
-				return 1;
-			}
-			fpRun << "instance " << inputFileName << "\n";
-			fpRun << "run_id " << runId << "\n";
-			fpRun << "value " << solutionValue << "\n";
-			fpRun << "time_seconds " << runningTime << "\n";
-			fpRun << "note output is limited to summary metrics; enable verbose solver output to expand this file.\n";
 		}
 
 		double avgValue = values.empty() ? 0.0
