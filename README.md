@@ -61,6 +61,16 @@ The solver reads instances from `index.txt` and writes a summary to `RESULTS_SUM
   export LD_LIBRARY_PATH=$PWD/third_party/or-tools/install_make/lib:$LD_LIBRARY_PATH
   ```
 
+## Results (Sample)
+
+A typical run writes a summary in `RESULTS_SUMMARY.txt`. Example format:
+
+```
+<instance_path> <run_id> <objective_value> <runtime_seconds>
+```
+
+Add a short table or plot here once you select the benchmarks you want to showcase.
+
 ## License
 
-Add your license here.
+MIT License. See `LICENSE`.
