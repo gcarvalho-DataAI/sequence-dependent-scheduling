@@ -374,85 +374,94 @@ int runSolution(vector<int> solution){
 
 int GPCA(){
 
-\tif(DEBUG)
-\t\tcout <<__FUNCTION__ << endl;
+	if(DEBUG)
+		cout <<__FUNCTION__ << endl;
 
-\tint cost = 0;
-\tset<int> updateMagazine;
-\tset<int> uninstall;
-\tset<int> install;
-\tvector<int> vectorUninstall;
-\tvector<int> vectorInstall;
-\tvector<vector<int>> all_costs;
+	int cost = 0;
+	set<int> updateMagazine;
+	set<int> uninstall;
+	vector<int> vectorUninstall;
+	vector<int> vectorInstall;
+	set<int> install;
+	set<int>::iterator it1, it2;
+	vector<vector<int>> all_costs;
 
-\tfor(auto& v : jobsAssignementsMatrix[indexJob]){
-\t\tif(updateMagazine.size() < magazineCapacity  && v.second < INT_MAX){
+	
+	for(auto& v : jobsAssignementsMatrix[indexJob]){
+        if(updateMagazine.size() < magazineCapacity  && v.second < INT_MAX){
 
-\t\t\tupdateMagazine.insert(v.second);
-\t\t}
-\t\telse{
-\t\t\tbreak;
-\t\t}
-\t}
+                updateMagazine.insert(v.second);
+        }
+        else{
+            break;
+        }
+    }
 
-\tif(updateMagazine.size() < magazineCapacity){
-\t\tfor(auto& v : magazine){
-\t\t\tupdateMagazine.insert(v);
+	if(updateMagazine.size() < magazineCapacity){
+		for(auto& v : magazine){
+			updateMagazine.insert(v);
 
-\t\t\tif(updateMagazine.size() >= magazineCapacity){
-\t\t\t\tbreak;
-\t\t\t}
-\t\t}
-\t}
+			if(updateMagazine.size() >= magazineCapacity){
+				break;
+			}
+		}
+	}
 
-\tset_difference(updateMagazine.begin(), updateMagazine.end(), magazine.begin(), magazine.end(),  inserter(install, install.begin()));
-\tset_difference(magazine.begin(), magazine.end(), updateMagazine.begin(), updateMagazine.end(), inserter(uninstall, uninstall.begin()));
 
-\tif(DEBUG){
+	set_difference(updateMagazine.begin(), updateMagazine.end(), magazine.begin(), magazine.end(),  inserter(install, install.begin()));
+	set_difference(magazine.begin(), magazine.end(), updateMagazine.begin(), updateMagazine.end(), inserter(uninstall, uninstall.begin()));
 
-\t\tcout << "Current magazine: " << magazine;
-\t\tcout << "Update magazine: " << updateMagazine;
-\t\tcout << "Unstalling tools: " << uninstall;
-\t\tcout << "Installing tools: " << install; 
+	if(DEBUG){
 
-\t}
+		cout << "Current magazine: " << magazine;
+		cout << "Update magazine: " << updateMagazine;
+		cout << "Unstalling tools: " << uninstall;
+		cout << "Installing tools: " << install; 
 
-\tif (!uninstall.empty() && !install.empty()) {
-\t\tif (USE_LAP) {
-\t\t\tvectorUninstall.assign(uninstall.begin(), uninstall.end());
-\t\t\tvectorInstall.assign(install.begin(), install.end());
-\t\t\tall_costs.resize(vectorUninstall.size());
-\t\t\tfor (size_t ui = 0; ui < vectorUninstall.size(); ++ui) {
-\t\t\t\tall_costs[ui].resize(vectorInstall.size());
-\t\t\t\tfor (size_t vi = 0; vi < vectorInstall.size(); ++vi) {
-\t\t\t\t\tall_costs[ui][vi] = toolsTimesSwap[vectorUninstall[ui] - 1][vectorInstall[vi] - 1];
-\t\t\t\t}
-\t\t\t}
-\n\t\t\tcost = LAP(all_costs, vectorUninstall, vectorInstall);
-\t\t} else {
-\t\t\t// Heuristic pairing (ordered sets)
-\t\t\tauto it1 = uninstall.begin();
-\t\t\tauto it2 = install.begin();
-\t\t\tsize_t count = min(uninstall.size(), install.size());
-\t\t\tfor(size_t i = 0; i < count; i++){
-\t\t\t\tcost += toolsTimesSwap[*it1 - 1][*it2 - 1];
-\t\t\t\t++it1;
-\t\t\t\t++it2;
-\t\t\t}
-\t\t}
-\t}
+	}
 
-\tif(DEBUG)
-\t\tcout << "Job cost: " << cost << endl;
+	if (!uninstall.empty() && !install.empty()) {
+		if (USE_LAP) {
+			vectorUninstall.assign(uninstall.begin(), uninstall.end());
+			vectorInstall.assign(install.begin(), install.end());
+			all_costs.resize(vectorUninstall.size());
 
-\tswap(updateMagazine, magazine);
+			for (size_t ui = 0; ui < vectorUninstall.size(); ++ui) {
+				all_costs[ui].resize(vectorInstall.size());
+				for (size_t vi = 0; vi < vectorInstall.size(); ++vi) {
+					all_costs[ui][vi] = toolsTimesSwap[vectorUninstall[ui] - 1][vectorInstall[vi] - 1];
+				}
+			}
 
-\tupdateMagazine.clear();
-\tfor(auto& v : all_costs)
-\t\tv.clear();
-\n\tall_costs.clear();
+			cost = LAP(all_costs, vectorUninstall, vectorInstall);
+		} else {
+			// Heuristic pairing (ordered sets)
+			it1 = uninstall.begin();
+			it2 = install.begin();
+			size_t count = min(uninstall.size(), install.size());
+			for(size_t i = 0; i < count; i++){
+				cost += toolsTimesSwap[*it1 - 1][*it2- 1];
+				++it1;
+				++it2;
+			}
+		}
+	}
 
-\treturn cost;
+	if(DEBUG)
+		cout << "Job cost: " << cost << endl;
+
+	swap(updateMagazine, magazine);
+
+	updateMagazine.clear();
+	for(auto& v : all_costs)
+        v.clear();
+    
+	all_costs.clear();
+	//exit(1);
+
+
+
+	return cost;
 }
 
 
