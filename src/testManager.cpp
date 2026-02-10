@@ -86,7 +86,7 @@ int main(int argc, char** argv)
 		} else if (arg == "--solutions" && a + 1 < argc) {
 			solutionsDir = argv[++a];
 		} else if (arg == "--help" || arg == "-h") {
-			printf("Usage: %s [--index FILE] [--out DIR] [--solutions DIR] [instance1 instance2 ...]\n", argv[0]);
+			printf("Usage: %s [--index FILE] [--out DIR] [--solutions DIR] [--lap|--no-lap] [instance1 instance2 ...]\n", argv[0]);
 			return 0;
 		} else {
 			instances.push_back(arg);

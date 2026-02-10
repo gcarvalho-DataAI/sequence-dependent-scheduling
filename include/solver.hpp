@@ -29,6 +29,8 @@ using namespace operations_research::sat;
 
 #define PRINT_MATRIX false
 
+bool USE_LAP = false; // toggled by CLI (use LAP for GPCA cost)
+
 //Configuration of the datasets n, m, c, Tmin, Tmaz
 int nJobs, nTools, magazineCapacity, minTools, maxTools;
 
@@ -372,116 +374,85 @@ int runSolution(vector<int> solution){
 
 int GPCA(){
 
-	if(DEBUG)
-		cout <<__FUNCTION__ << endl;
+\tif(DEBUG)
+\t\tcout <<__FUNCTION__ << endl;
 
-	int cost = 0;
-	set<int> updateMagazine;
-	set<int> uninstall;
-	vector<int> vectorUninstall;
-	vector<int> vectorInstall;
-	set<int> install;
-	set<int>::iterator it1, it2;
-	vector<vector<int>> all_costs;
+\tint cost = 0;
+\tset<int> updateMagazine;
+\tset<int> uninstall;
+\tset<int> install;
+\tvector<int> vectorUninstall;
+\tvector<int> vectorInstall;
+\tvector<vector<int>> all_costs;
 
-	
-	for(auto& v : jobsAssignementsMatrix[indexJob]){
-        if(updateMagazine.size() < magazineCapacity  && v.second < INT_MAX){
+\tfor(auto& v : jobsAssignementsMatrix[indexJob]){
+\t\tif(updateMagazine.size() < magazineCapacity  && v.second < INT_MAX){
 
-                updateMagazine.insert(v.second);
-        }
-        else{
-            break;
-        }
-    }
+\t\t\tupdateMagazine.insert(v.second);
+\t\t}
+\t\telse{
+\t\t\tbreak;
+\t\t}
+\t}
 
-	if(updateMagazine.size() < magazineCapacity){
-		for(auto& v : magazine){
-			updateMagazine.insert(v);
+\tif(updateMagazine.size() < magazineCapacity){
+\t\tfor(auto& v : magazine){
+\t\t\tupdateMagazine.insert(v);
 
-			if(updateMagazine.size() >= magazineCapacity){
-				break;
-			}
-		}
-	}
+\t\t\tif(updateMagazine.size() >= magazineCapacity){
+\t\t\t\tbreak;
+\t\t\t}
+\t\t}
+\t}
 
+\tset_difference(updateMagazine.begin(), updateMagazine.end(), magazine.begin(), magazine.end(),  inserter(install, install.begin()));
+\tset_difference(magazine.begin(), magazine.end(), updateMagazine.begin(), updateMagazine.end(), inserter(uninstall, uninstall.begin()));
 
-	set_difference(updateMagazine.begin(), updateMagazine.end(), magazine.begin(), magazine.end(),  inserter(install, install.begin()));
-	set_difference(magazine.begin(), magazine.end(), updateMagazine.begin(), updateMagazine.end(), inserter(uninstall, uninstall.begin()));
+\tif(DEBUG){
 
-	if(DEBUG){
+\t\tcout << "Current magazine: " << magazine;
+\t\tcout << "Update magazine: " << updateMagazine;
+\t\tcout << "Unstalling tools: " << uninstall;
+\t\tcout << "Installing tools: " << install; 
 
-		cout << "Current magazine: " << magazine;
-		cout << "Update magazine: " << updateMagazine;
-		cout << "Unstalling tools: " << uninstall;
-		cout << "Installing tools: " << install; 
+\t}
 
-	}
+\tif (!uninstall.empty() && !install.empty()) {
+\t\tif (USE_LAP) {
+\t\t\tvectorUninstall.assign(uninstall.begin(), uninstall.end());
+\t\t\tvectorInstall.assign(install.begin(), install.end());
+\t\t\tall_costs.resize(vectorUninstall.size());
+\t\t\tfor (size_t ui = 0; ui < vectorUninstall.size(); ++ui) {
+\t\t\t\tall_costs[ui].resize(vectorInstall.size());
+\t\t\t\tfor (size_t vi = 0; vi < vectorInstall.size(); ++vi) {
+\t\t\t\t\tall_costs[ui][vi] = toolsTimesSwap[vectorUninstall[ui] - 1][vectorInstall[vi] - 1];
+\t\t\t\t}
+\t\t\t}
+\n\t\t\tcost = LAP(all_costs, vectorUninstall, vectorInstall);
+\t\t} else {
+\t\t\t// Heuristic pairing (ordered sets)
+\t\t\tauto it1 = uninstall.begin();
+\t\t\tauto it2 = install.begin();
+\t\t\tsize_t count = min(uninstall.size(), install.size());
+\t\t\tfor(size_t i = 0; i < count; i++){
+\t\t\t\tcost += toolsTimesSwap[*it1 - 1][*it2 - 1];
+\t\t\t\t++it1;
+\t\t\t\t++it2;
+\t\t\t}
+\t\t}
+\t}
 
-	it1 = uninstall.begin();
-	it2 = install.begin();
+\tif(DEBUG)
+\t\tcout << "Job cost: " << cost << endl;
 
-	for(int i = 0; i < uninstall.size(); i++){
+\tswap(updateMagazine, magazine);
 
-		cost += toolsTimesSwap[*it1 - 1][*it2- 1];
+\tupdateMagazine.clear();
+\tfor(auto& v : all_costs)
+\t\tv.clear();
+\n\tall_costs.clear();
 
-		it1++;
-		it2++;
-
-	}
-
-	/*
-	int indexCost = 0;
-	all_costs.resize(uninstall.size());
-	vectorUninstall.push_back(*it1);
-
-
-	for(int j = 0; j < install.size(); j++){
-
-		vectorInstall.push_back(*it2);
-		if(DEBUG)
-			cout << *it1 << " -> " << *it2 << " = " << toolsTimesSwap[*it1 - 1][*it2- 1] << endl;
-
-		all_costs[indexCost].push_back(toolsTimesSwap[*it1 - 1][*it2- 1]);
-		it2++;
-	}
-	it1++;
-	indexCost++;
-
-	for(int i = 1; i < uninstall.size(); i++){
-
-		vectorUninstall.push_back(*it1);
-		it2 = install.begin();
-		
-		for(int j = 0; j < install.size(); j++){
-			if(DEBUG)
-				cout << *it1 << " -> " << *it2 << " = " << toolsTimesSwap[*it1 - 1][*it2- 1] << endl;
-			all_costs[indexCost].push_back(toolsTimesSwap[*it1 - 1][*it2- 1]);
-			it2++;
-		}
-
-		it1++;
-		indexCost++;
-
-	}
-
-	cost = LAP(all_costs, vectorUninstall, vectorInstall);*/
-
-	if(DEBUG)
-		cout << "Job cost: " << cost << endl;
-
-	swap(updateMagazine, magazine);
-
-	updateMagazine.clear();
-	for(auto& v : all_costs)
-        v.clear();
-    
-	all_costs.clear();
-	//exit(1);
-
-
-
-	return cost;
+\treturn cost;
 }
 
 

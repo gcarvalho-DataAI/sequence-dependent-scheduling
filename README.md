@@ -57,6 +57,8 @@ The solver reads instances from `index.txt` and writes one summary file per inst
 
 Run all instances in parallel (24 jobs example):
 
+To enable LAP in GPCA, add `--lap` (default is heuristic):
+
 ```bash
 find instances/instance_txt -type f -name "*.txt" | sort | parallel -j24 ./bin/solver {}
 ```
