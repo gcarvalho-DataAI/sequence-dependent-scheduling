@@ -11,6 +11,31 @@ namespace fs = std::filesystem;
 
 #define RUNS 10						// how many runs for each instance?
 
+static string jsonEscape(const string& s) {
+	string out;
+	out.reserve(s.size() + 8);
+	for (char c : s) {
+		switch (c) {
+			case '"': out += "\\\""; break;
+			case '\\': out += "\\\\"; break;
+			case '\b': out += "\\b"; break;
+			case '\f': out += "\\f"; break;
+			case '\n': out += "\\n"; break;
+			case '\r': out += "\\r"; break;
+			case '\t': out += "\\t"; break;
+			default:
+				if (static_cast<unsigned char>(c) < 0x20) {
+					char buf[7];
+					snprintf(buf, sizeof(buf), "\\u%04x", c);
+					out += buf;
+				} else {
+					out += c;
+				}
+		}
+	}
+	return out;
+}
+
 int main(int argc, char** argv)
 {
 	int solutionValue;					// stores the result
@@ -57,10 +82,16 @@ int main(int argc, char** argv)
 		fs::path inPath(inputFileName);
 		string baseName = inPath.filename().string();
 		string outPath = (fs::path(outDir) / (baseName + ".summary.txt")).string();
+		string jsonPath = (fs::path(outDir) / (baseName + ".summary.json")).string();
 		ofstream fpOut(outPath);
+		ofstream fpJson(jsonPath);
 
 		if (!fpOut) {
 			fprintf(stderr, "ERROR: cannot write to %s\n", outPath.c_str());
+			return 1;
+		}
+		if (!fpJson) {
+			fprintf(stderr, "ERROR: cannot write to %s\n", jsonPath.c_str());
 			return 1;
 		}
 
@@ -73,6 +104,11 @@ int main(int argc, char** argv)
 		fpOut << "# runs: " << RUNS << "\n";
 		fpOut << "# run_id value time_seconds\n";
 
+		fpJson << "{\n";
+		fpJson << "  \"instance\": \"" << jsonEscape(inputFileName) << "\",\n";
+		fpJson << "  \"runs\": " << RUNS << ",\n";
+		fpJson << "  \"items\": [\n";
+
 		for (j = 0; j < RUNS; j++)
 		{
 			printf("Run %d\n", j + 1);
@@ -84,6 +120,11 @@ int main(int argc, char** argv)
 			times.push_back(runningTime);
 
 			fpOut << (j + 1) << " " << solutionValue << " " << runningTime << "\n";
+			fpJson << "    {\"run_id\": " << (j + 1)
+					<< ", \"value\": " << solutionValue
+					<< ", \"time_seconds\": " << runningTime << "}";
+			if (j + 1 < RUNS) fpJson << ",";
+			fpJson << "\n";
 		}
 
 		double avgValue = values.empty() ? 0.0
@@ -108,15 +149,25 @@ int main(int argc, char** argv)
 		// Convergence curve as best-so-far across runs.
 		fpOut << "# convergence_best_so_far ";
 		int bestSoFar = values.empty() ? 0 : values.front();
+		fpJson << "  ],\n";
+		fpJson << "  \"avg_value\": " << avgValue << ",\n";
+		fpJson << "  \"avg_time\": " << avgTime << ",\n";
+		fpJson << "  \"best_value\": " << bestValue << ",\n";
+		fpJson << "  \"best_time\": " << bestTime << ",\n";
+		fpJson << "  \"convergence_best_so_far\": [";
 		for (size_t k = 0; k < values.size(); ++k) {
 			if (values[k] < bestSoFar) {
 				bestSoFar = values[k];
 			}
 			fpOut << bestSoFar;
+			fpJson << bestSoFar;
 			if (k + 1 < values.size()) {
 				fpOut << ",";
+				fpJson << ",";
 			}
 		}
 		fpOut << "\n";
+		fpJson << "]\n";
+		fpJson << "}\n";
 	}
 }
