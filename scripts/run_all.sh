@@ -30,6 +30,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Ensure OR-Tools shared libs are found.
+ORTOOLS_LIB_DIR="third_party/or-tools/install_make/lib"
+if [[ -d "${ORTOOLS_LIB_DIR}" ]]; then
+  export LD_LIBRARY_PATH="${PWD}/${ORTOOLS_LIB_DIR}:${LD_LIBRARY_PATH:-}"
+fi
+
 if [[ -n "${INDEX_FILE}" && -f "${INDEX_FILE}" ]]; then
   mapfile -t files < "${INDEX_FILE}"
 else
